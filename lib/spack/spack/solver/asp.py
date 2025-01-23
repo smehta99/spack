@@ -2613,12 +2613,17 @@ class SpackSolverSetup:
                 self.explicitly_required_namespaces[node.name] = node.namespace
 
         self.gen = ProblemInstanceBuilder()
+        self.gen.h1("Generic information")
         if using_libc_compatibility():
             for libc in self.libcs:
                 self.gen.fact(fn.host_libc(libc.name, libc.version))
 
         if not allow_deprecated:
             self.gen.fact(fn.deprecated_versions_not_allowed())
+
+        self.gen.newline()
+        for pkg_name in spack.compilers.config.supported_compilers():
+            self.gen.fact(fn.compiler_package(pkg_name))
 
         # Calculate develop specs
         # they will be used in addition to command line specs
@@ -3018,6 +3023,9 @@ def possible_compilers(*, configuration) -> List["spack.spec.Spec"]:
             continue
 
         result.add(c)
+
+    for pkg_name in spack.compilers.config.supported_compilers():
+        result.update(spack.store.STORE.db.query(pkg_name))
 
     result = list(result)
     result.sort()
