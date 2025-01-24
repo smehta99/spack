@@ -2593,6 +2593,7 @@ class SpackSolverSetup:
             reuse: list of concrete specs that can be reused
             allow_deprecated: if True adds deprecated versions into the solve
         """
+        reuse = reuse or []
         check_packages_exist(specs)
 
         node_counter = _create_counter(specs, tests=self.tests)
@@ -2641,6 +2642,17 @@ class SpackSolverSetup:
 
         specs = tuple(specs)  # ensure compatible types to add
 
+        _ = spack.compilers.config.all_compilers(init_config=True)
+        self.possible_compilers = possible_compilers(configuration=spack.config.CONFIG)
+        for x in self.possible_compilers:
+            if x.external:
+                continue
+            reuse.append(x)
+            for dep in x.traverse(root=False, deptype="run"):
+                reuse.extend(dep.traverse(deptype=("link", "run")))
+
+        # reuse.extend([x for x in self.possible_compilers if not x.external])
+
         self.gen.h1("Reusable concrete specs")
         self.define_concrete_input_specs(specs, self.pkgs)
         if reuse:
@@ -2648,9 +2660,6 @@ class SpackSolverSetup:
             for reusable_spec in reuse:
                 self.register_concrete_spec(reusable_spec, self.pkgs)
         self.concrete_specs()
-
-        _ = spack.compilers.config.all_compilers(init_config=True)
-        self.possible_compilers = possible_compilers(configuration=spack.config.CONFIG)
 
         self.gen.h1("Generic statements on possible packages")
         node_counter.possible_packages_facts(self.gen, fn)
@@ -2995,10 +3004,11 @@ class ProblemInstanceBuilder:
 
 
 def possible_compilers(*, configuration) -> List["spack.spec.Spec"]:
+    # FIXME (compiler as nodes): Discard early specs that are not marked for this target?
     result = set()
-    for c in spack.compilers.config.all_compilers_from(configuration):
-        # FIXME (compiler as nodes): Discard early specs that are not marked for this target?
 
+    # Compilers defined in configuration
+    for c in spack.compilers.config.all_compilers_from(configuration):
         if using_libc_compatibility() and not c_compiler_runs(c):
             try:
                 compiler = c.extra_attributes["compilers"]["c"]
@@ -3024,6 +3034,7 @@ def possible_compilers(*, configuration) -> List["spack.spec.Spec"]:
 
         result.add(c)
 
+    # Compilers from the local store
     for pkg_name in spack.compilers.config.supported_compilers():
         result.update(spack.store.STORE.db.query(pkg_name))
 
